@@ -1,0 +1,53 @@
+﻿@inherits LayoutComponentBase
+@inject NavigationManager NavManager
+@inject AuthenticationStateProvider authenticationStateProvider
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        
+       <AuthorizeView>
+           <Authorized>
+                <div class ="top-row px-4">
+                    <a class="btn btn-primary" target="_blank" @onclick="async() => await LogoutAsync()">Logout</a>
+                    <a>@Email</a>
+               </div>
+           </Authorized>
+           <NotAuthorized>
+                <div class="top-row px-4">
+                    <a class="btn btn-primary" target="_blank" @onclick='() => { NavManager.NavigateTo("/login"); }'>Login</a>
+                    <a class="btn btn-primary" target="_blank" @onclick='() => { NavManager.NavigateTo("/register"); }'>Register</a>
+                </div>
+           </NotAuthorized>
+       </AuthorizeView>
+        
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@code{
+
+    [CascadingParameter]
+    private Task<AuthenticationState> authenticationState{ get; set; }
+    private string Email { get; set; }
+
+    private async Task LogoutAsync()
+    {
+        var customState = (CustomAuthenticationStateProvider)authenticationStateProvider;
+        await customState.UpdateAuthenticationStateAsync(null);
+        NavManager.NavigateTo("/login", true);
+    } 
+
+    protected async override Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+
+        var result = await authenticationState;
+        Email = result.User.Identity.Name;
+    }
+}

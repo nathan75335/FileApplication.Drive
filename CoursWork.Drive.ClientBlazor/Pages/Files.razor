@@ -1,0 +1,421 @@
+﻿@using System.Net.WebSockets;
+@using System.Text;
+@using System.Text.Json;
+@using CoursWork.Drive.ClientBlazor.Authentication;
+@using CoursWork.Drive.ClientBlazor.Services;
+@using CoursWork.Drive.Shared.JsonHanlerRequestResponse
+@using CoursWork.Drive.Shared
+@using CoursWork.Drive.Shared.Requests;
+@using System.Text.Encodings.Web;
+@using Newtonsoft.Json;
+@inject IJSRuntime JsRuntime
+@inject AuthenticationStateProvider authenticationStateProvider
+@page "/files"
+@attribute [Authorize]
+<h3>Files</h3>
+<AuthorizeView>
+    <Authorized>
+        <div class="top-row d-flex justify-content-end px-4 ">
+            <button class="btn btn-primary" @onclick="@(async() => await ShowThePopUpWindowAsync("upload-div"))">Add <i class="bi bi-plus">+</i></button>
+        </div>
+        <div style="display:none" id="rename-div" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Rename File</h5>
+                        <button type="button" class="btn-close" @onclick="@(async() => await CloseWindowAsync("rename-div"))" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <label>Rename File:</label>
+                        @* @if(_files.Count != 0){
+                        <input value="@file.Name" id="fileName" />
+                        } *@
+                        <div class="input-group mb-3">
+                            <input id="fileName" type="text" class="form-control" aria-label="Recipient's username" aria-describedby="basic-addon2">
+                            <div class="input-group-append">
+                                <span class="input-group-text extension-file" id="basic-addon2"></span>
+                            </div>
+                        </div>
+
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" @onclick="@(async() => await CloseWindowAsync("rename-div"))">Close</button>
+                        <button type="button" class="btn btn-primary" @onclick="@(async() => await RenameAsync())">Update</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="upload-div" class="modal" style="display:none">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Upload File</h5>
+                        <button type="button" class="btn-close" @onclick="@(async() => await CloseWindowAsync("upload-div"))" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <label>Choose File:</label>
+                        <InputFile OnChange="@HandleSelection" mul />
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" @onclick="@(async() => await CloseWindowAsync("upload-div"))">Close</button>
+                        <button type="button" class="btn btn-primary" @onclick="PostFileAsync">Upload</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>File Name</th>
+                    <th>Extension</th>
+                    <th>Size(Kbyte)</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+
+                @if (IsLoading == false && _files.Count == 0)
+                {
+                    <tr class="text-center">
+                        <td colspan="4">
+                            <div class="d-flex justify-content-center">
+                                <div class="">
+                                    <span class="">Not Found !</span>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                else if (IsLoading == true && _files is null)
+                {
+                    <tr class="text-center">
+                        <td colspan="4">
+                            <div class="d-flex justify-content-center">
+                                <div class="spinner-border" role="status">
+                                    <span class="sr-only"></span>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                else if (_files.Count != 0 && IsLoading == false)
+                {
+                    @foreach (var file in _files)
+                    {
+                        <tr>
+                            <td>@file.Name</td>
+                            <td>@file.Extension</td>
+                            <td>@Math.Round(file.Size/1024, 2)</td>
+                            <td>
+                                <div class="d-flex d-inline-block">
+                                    <button class="btn btn-secondary m-1" @onclick='async() => await ShowRenameWindowAsync(file.Name, file.Id)'>Rename</button>
+                                    <button class="btn btn-danger m-1" @onclick="async() => await DeleteAsync(file.Id)">Delete</button>
+                                    <button class="btn btn-success" @onclick="async() => await DownloadAsync(file.Id)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16">
+                                            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
+                                            <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z" />
+                                        </svg>&nbsp;Download
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+
+            </tbody>
+        </table>
+    </Authorized>
+    <NotAuthorized>
+        <div>
+            Not Authorized to see this page
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    private string connectionId = string.Empty;
+    private List<FileDto> _files = new List<FileDto>();
+    public bool IsLoading { get; set; } = false;
+    private IBrowserFile file;
+    ClientWebSocket ws = new ClientWebSocket();
+    FileRequest fileRequestRename = null;
+    private UserSession userSession = new UserSession();
+
+    protected async override Task OnInitializedAsync()
+    {
+        IsLoading = true;
+        base.OnInitialized();
+
+        await ws.ConnectAsync(new Uri("ws://localhost:5125/ws"), CancellationToken.None);
+        var authentication = (CustomAuthenticationStateProvider)authenticationStateProvider;
+        userSession = await authentication.GetUserSessionAsync();
+        var request = JsonConvert.SerializeObject(new JsonRequest()
+            {
+                ConnectionId = String.Empty,
+                RequestType = RequestType.Request,
+                MethodType = MethodType.Get,
+                UserId = userSession.UserId,
+                Token = userSession.Token
+            });
+        ConnectionManagerService.UserId = userSession.UserId;
+        await SendMessageAsync(ws, request, WebSocketMessageType.Binary);
+
+        var receiveTask = Task.Run(async () =>
+        {
+            var buffer = new byte[1024 * 50000];
+
+            while (true)
+            {
+                var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+
+                if (result.MessageType == WebSocketMessageType.Binary)
+                {
+                    var messageReceived = Encoding.UTF32.GetString(buffer, 0, result.Count);
+                    var jsonResponse = JsonConvert.DeserializeObject<JsonRequest>(messageReceived);
+
+                    if (jsonResponse is { RequestType: RequestType.Response })
+                    {
+                        FileRequest? fileRequest = null;
+                        JsonRequest? response = null;
+
+
+                        switch (jsonResponse.MethodType)
+                        {
+                            case MethodType.Post:
+                                fileRequest = JsonConvert.DeserializeObject<FileRequest>(jsonResponse.Body);
+
+                                break;
+                            case MethodType.Put:
+                                fileRequest = JsonConvert.DeserializeObject<FileRequest>(jsonResponse.Body);
+
+                                break;
+                            case MethodType.Delete:
+                                fileRequest = JsonConvert.DeserializeObject<FileRequest>(jsonResponse.Body);
+
+                                //response = ;
+                                break;
+                            case MethodType.Get:
+                                var files = JsonConvert.DeserializeObject<List<FileDto>>(jsonResponse.Body);
+                                IsLoading = false;
+                                _files = files;
+                                StateHasChanged();
+                                break;
+                            case MethodType.GetOne:
+                                fileRequest = JsonConvert.DeserializeObject<FileRequest>(jsonResponse.Body);
+                                await DownloadFileFromStreamAsync(fileRequest);
+                                break;
+
+                        }
+                    }
+                }
+
+                if(result.MessageType == WebSocketMessageType.Text)
+                {
+                    var messageReceived = Encoding.UTF32.GetString(buffer, 0, result.Count);
+                    ConnectionManagerService.ConnectionId = messageReceived;
+                    
+                }
+
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    break;
+                }
+            }
+        });
+
+
+    }
+
+    public async Task SendMessageAsync(WebSocket webSocket, string message, WebSocketMessageType websocketMessageType)
+    {
+        var buffer = Encoding.UTF32.GetBytes(message);
+
+        await webSocket.SendAsync(new ReadOnlyMemory<byte>(buffer), websocketMessageType, true, CancellationToken.None);
+    }
+
+    public async Task ShowThePopUpWindowAsync(string divId)
+    {
+        await JsRuntime.InvokeVoidAsync("handleOnClick", new object[] { divId });
+    }
+
+    public async Task ShowRenameWindowAsync(string fileName, int id)
+    {
+        fileRequestRename = new FileRequest();
+        fileRequestRename.Id = id;
+        string name = Path.GetFileNameWithoutExtension(fileName);
+        string extension = Path.GetExtension(fileName);
+        await JsRuntime.InvokeVoidAsync("showRenameWindow", name, extension);
+    }
+
+    public async Task CloseWindowAsync(string divId)
+    {
+        await JsRuntime.InvokeVoidAsync("handleOnClose", divId);
+    }
+
+    public async Task PostFileAsync()
+    {
+        var buffer = new byte[file.Size];
+        var data = await GetFileBytes(file);
+
+        var filePost = new FileRequest()
+            {
+                Name = file.Name,
+                Extension = file.ContentType,
+                UserId = ConnectionManagerService.UserId,
+                Content = data,
+                Size = file.Size
+        };
+
+        var fileSerialized = JsonConvert.SerializeObject(filePost);
+
+        var request = new JsonRequest()
+            {
+                Token = userSession.Token,
+                Body = fileSerialized,
+                MethodType = MethodType.Post,
+                RequestType = RequestType.Request,
+                UserId = ConnectionManagerService.UserId
+            };
+
+        var requestSerialized = JsonConvert.SerializeObject(request);
+        try
+        {
+            await SendMessageAsync(ws, requestSerialized, WebSocketMessageType.Binary);
+        }
+        catch(Exception ex)
+        {
+            await JsRuntime.InvokeVoidAsync("alert", $" could not add  the file{ex.Message}");
+        }
+
+        await CloseWindowAsync("upload-div");
+        await JsRuntime.InvokeVoidAsync("alert", "Added the file");
+
+        var requestAll = JsonConvert.SerializeObject(new JsonRequest()
+            {
+                Token = userSession.Token,
+                ConnectionId = ConnectionManagerService.ConnectionId,
+                RequestType = RequestType.Request,
+                MethodType = MethodType.Get,
+                UserId = ConnectionManagerService.UserId
+            });
+
+        await SendMessageAsync(ws, requestAll, WebSocketMessageType.Binary);
+        IsLoading = true;
+        _files = null;
+        StateHasChanged();
+    }
+
+    private async Task HandleSelection(InputFileChangeEventArgs e)
+    {
+        var buffer = new byte[e.File.Size];
+
+        await e.File.OpenReadStream().ReadAsync(buffer);
+
+        file = e.File;
+    }
+
+    private async Task<byte[]> GetFileBytes(IBrowserFile file)
+    {
+        using var stream = new MemoryStream();
+        await file.OpenReadStream().CopyToAsync(stream);
+        return stream.ToArray();
+    }
+
+    public async Task DeleteAsync(int id)
+    {
+        var filePost = new FileRequest()
+            {
+                Id = id
+            };
+
+        var fileSerialized = JsonConvert.SerializeObject(filePost);
+
+        var request = new JsonRequest()
+            {
+                Token = userSession.Token,
+                ConnectionId = ConnectionManagerService.ConnectionId,
+                Body = fileSerialized,
+                MethodType = MethodType.Delete,
+                RequestType = RequestType.Request,
+                UserId = ConnectionManagerService.UserId
+            };
+
+        var requestSerialized = JsonConvert.SerializeObject(request);
+
+        var isConfirmed = await JsRuntime.InvokeAsync<bool>("confirm", "Do you really want to delete this file?");
+
+        if (!isConfirmed)
+        {
+            return;
+        }
+
+        try
+        {
+            await SendMessageAsync(ws, requestSerialized, WebSocketMessageType.Binary);
+        }
+        catch (Exception ex)
+        {
+            await JsRuntime.InvokeVoidAsync("alert", $" could not delete  the file {ex.Message}");
+        }
+
+    }
+
+    private async Task DownloadFileFromStreamAsync(FileRequest fileRequest)
+    {
+        var fileStream = new MemoryStream(fileRequest.Content);
+
+        using var streamRef = new DotNetStreamReference(stream: fileStream);
+        await JsRuntime.InvokeVoidAsync("downloadFileFromStream", fileRequest.Name, streamRef);
+    }
+
+    public async Task DownloadAsync(int id)
+    {
+        await SendMessageAsync(ws,
+        JsonConvert.SerializeObject(
+                new JsonRequest()
+                    {
+                        Token = userSession.Token,
+                        UserId = ConnectionManagerService.UserId,
+                        MethodType = MethodType.GetOne,
+                        RequestType = RequestType.Request,
+                        ConnectionId = ConnectionManagerService.ConnectionId,
+                        Body = JsonConvert.SerializeObject(new FileRequest() { Id = id })
+                    }),
+        WebSocketMessageType.Binary);
+    }
+
+    public async Task RenameAsync()
+    {
+        var fileName = await JsRuntime.InvokeAsync<string>("getElementValue", "fileName");
+        var fileExtension = await JsRuntime.InvokeAsync<string>("getElementValueSpan", "basic-addon2");
+
+        if (string.IsNullOrEmpty(fileName))
+        {
+            return;
+        }
+
+        fileName += fileExtension;
+
+        var fileRequest = new FileRequest()
+            {
+                Id = fileRequestRename.Id,
+                Name = fileName
+            };
+        var request = new JsonRequest()
+            {
+                Token = userSession.Token,
+                UserId = ConnectionManagerService.UserId,
+                ConnectionId = ConnectionManagerService.ConnectionId,
+                Body = JsonConvert.SerializeObject(fileRequest),
+                RequestType = RequestType.Request,
+                MethodType = MethodType.Put
+            };
+
+        await SendMessageAsync(ws, JsonConvert.SerializeObject(request), WebSocketMessageType.Binary);
+
+        await CloseWindowAsync("rename-div");
+    }
+}

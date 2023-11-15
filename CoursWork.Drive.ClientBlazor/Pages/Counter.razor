@@ -1,0 +1,53 @@
+﻿@page "/counter"
+@using System.Net.WebSockets;
+@using System.Text;
+
+<PageTitle>Counter</PageTitle>
+
+<h1>Counter</h1>
+
+<p role="status">Current count: @currentCount</p>
+<h2>connection Id = @connectionId</h2>
+
+<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+
+@code {
+    private int currentCount = 0;
+    private string connectionId = string.Empty;
+
+    private void IncrementCount()
+    {
+        currentCount++;
+    }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        var ws = new ClientWebSocket();
+        Console.WriteLine("Connecting to server");
+
+        ws.ConnectAsync(new Uri("ws://localhost:5125"), CancellationToken.None);
+        Console.WriteLine("Connected");
+
+        var receiveTask = Task.Run(async () =>
+        {
+            var buffer = new byte[1024 * 4];
+            while (true)
+            {
+                var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    break;
+                }
+
+                var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                connectionId = message;
+                Console.WriteLine(message);
+            }
+        });
+
+       
+    }
+}
