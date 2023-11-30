@@ -14,7 +14,8 @@ public class FileDriveConfiguration : IEntityTypeConfiguration<FileDrive>
         builder.Property(x => x.Description)
             .IsRequired(false);
         builder.HasOne(x => x.User)
-            .WithMany(x => x.FileDrives);
+            .WithMany(x => x.FileDrives)
+            .HasForeignKey(x => x.UserId);
 
         builder.ToTable("Files");
     }

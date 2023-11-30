@@ -1,5 +1,4 @@
-﻿using CoursWork.Drive.BusinessLogic.DTO_s;
-using CoursWork.Drive.BusinessLogic.Exceptions;
+﻿using CoursWork.Drive.BusinessLogic.Exceptions;
 using CoursWork.Drive.DataAccess.Entities;
 using CoursWork.Drive.DataAccess.Repositories;
 using CoursWork.Drive.Shared.Authentication;
@@ -35,8 +34,8 @@ public class AuthorizeService : IAuthorizeService
     /// <returns>A Task That contains a Token</returns>
     public async Task<UserSession> AuthorizeAsync(string email, string password, CancellationToken cancellationToken)
     {
-        var user = await ValidateUserAsync(email, password, cancellationToken);
-        var token = GenerateTokenAsync(user);
+        User user = await ValidateUserAsync(email, password, cancellationToken);
+        string token = GenerateTokenAsync(user);
 
         return new UserSession
         {
@@ -56,10 +55,10 @@ public class AuthorizeService : IAuthorizeService
     /// <returns>A token as a <see cref="string"/> </returns>
     private string GenerateTokenAsync(User user)
     {
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var key = Encoding.ASCII.GetBytes(_settings.GetSection("JWT")["Key"]);
-      
-        var tokenDescriptor = new SecurityTokenDescriptor()
+        JwtSecurityTokenHandler tokenHandler = new JwtSecurityTokenHandler();
+        byte[] key = Encoding.ASCII.GetBytes(_settings.GetSection("JWT")["Key"]);
+
+        SecurityTokenDescriptor tokenDescriptor = new SecurityTokenDescriptor()
         {
             Subject = new ClaimsIdentity(new Claim[]
             {
@@ -76,7 +75,7 @@ public class AuthorizeService : IAuthorizeService
 
         try
         {
-            var token = tokenHandler.CreateToken(tokenDescriptor);
+            SecurityToken token = tokenHandler.CreateToken(tokenDescriptor);
 
             return tokenHandler.WriteToken(token);
         }
@@ -90,9 +89,9 @@ public class AuthorizeService : IAuthorizeService
 
     public async Task<User> ValidateUserAsync(string email, string password, CancellationToken cancellationToken)
     {
-        var userChecked = await _userRepository.CheckPasswordAsync(email, password, cancellationToken);
+        User? userChecked = await _userRepository.CheckPasswordAsync(email, password, cancellationToken);
 
-        if (userChecked is null )
+        if (userChecked is null)
         {
             _logger.LogError("Error occured while processing the validation of credentials ");
 

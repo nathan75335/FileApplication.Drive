@@ -27,7 +27,9 @@ public static class WebSocketMiddlewareExtension
             .AddScoped<IAuthorizeService, AuthorizeService>()
             .AddScoped<IFileDriveService, FileDriveService>()
             .AddAutoMapper(typeof(Program))
-            .AddTransient<CustomExceptionMiddleware>();
+            .AddTransient<CustomExceptionMiddleware>()
+            .AddScoped<IFileAccessRepository, FileAccessRepository>()
+            .AddScoped<IFileAccessService, FileAccessService>();
     }
 
 

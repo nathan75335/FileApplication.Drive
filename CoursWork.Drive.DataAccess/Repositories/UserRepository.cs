@@ -39,4 +39,22 @@ public class UserRepository : IUserRepository
             .FirstOrDefaultAsync(user => user.Email == email, cancellationToken);
     }
 
+    public async Task<int> GetIdByEmailAsync(string email)
+    {
+        return await _driveContext.Users
+            .AsNoTracking()
+            .Where(user => user.Email == email)
+            .Select(user => user.Id)
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<List<int>> GetIdByEmailAsync(List<string> emails)
+    {
+        return await _driveContext.Users
+            .AsNoTracking()
+            .Where(user => emails.Contains(user.Email))
+            .Select(user => user.Id)
+            .ToListAsync();
+    }
+
 }

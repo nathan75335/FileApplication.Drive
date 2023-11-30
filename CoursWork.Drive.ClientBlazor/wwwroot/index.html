@@ -57,8 +57,18 @@
             return document.getElementById(id).textContent;
         }
 
-       
+        function onClickAddEmail(){
+            var emailValue = document.getElementById("emailName").value;
+            document.getElementById("emails").innerHTML += " " + emailValue;
 
+            return emailValue;
+        }
+
+        function showShareWindow(fileName, extension) {
+            //document.getElementById("share-div").style.display = 'block';
+            document.getElementById("fileName-share").value = fileName;
+            document.getElementById("basic-addon2-share").textContent = extension;
+        }
     </script>
 </body>
 

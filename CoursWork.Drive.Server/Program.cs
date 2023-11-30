@@ -7,9 +7,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<DriveContext>(options =>
     {
         options.UseSqlServer(builder.Configuration.GetConnectionString("Sql"));
-        //options.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         options.EnableSensitiveDataLogging();
-    })
+    }, ServiceLifetime.Transient)
+    .AddDbContextFactory<DriveContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("Sql")), ServiceLifetime.Scoped)
     .AddWebSocketServerConnectionManager(builder.Configuration)
     .AddJwtAuthentication(builder.Configuration)
     .AddAuthorization()

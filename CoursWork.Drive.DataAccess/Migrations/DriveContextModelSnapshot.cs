@@ -22,6 +22,32 @@ namespace CoursWork.Drive.DataAccess.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("CoursWork.Drive.DataAccess.Entities.FileAccess", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AccessLevel")
+                        .HasColumnType("int");
+
+                    b.Property<int>("FileDriveId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FileDriveId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("FileAccesses", (string)null);
+                });
+
             modelBuilder.Entity("CoursWork.Drive.DataAccess.Entities.FileDrive", b =>
                 {
                     b.Property<int>("Id")
@@ -126,6 +152,25 @@ namespace CoursWork.Drive.DataAccess.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("CoursWork.Drive.DataAccess.Entities.FileAccess", b =>
+                {
+                    b.HasOne("CoursWork.Drive.DataAccess.Entities.FileDrive", "FileDrive")
+                        .WithMany("FileAccesses")
+                        .HasForeignKey("FileDriveId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("CoursWork.Drive.DataAccess.Entities.User", "User")
+                        .WithMany("FileAccesses")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("FileDrive");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("CoursWork.Drive.DataAccess.Entities.FileDrive", b =>
                 {
                     b.HasOne("CoursWork.Drive.DataAccess.Entities.User", "User")
@@ -146,6 +191,11 @@ namespace CoursWork.Drive.DataAccess.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("CoursWork.Drive.DataAccess.Entities.FileDrive", b =>
+                {
+                    b.Navigation("FileAccesses");
+                });
+
             modelBuilder.Entity("CoursWork.Drive.DataAccess.Entities.Role", b =>
                 {
                     b.Navigation("Users");
@@ -153,6 +203,8 @@ namespace CoursWork.Drive.DataAccess.Migrations
 
             modelBuilder.Entity("CoursWork.Drive.DataAccess.Entities.User", b =>
                 {
+                    b.Navigation("FileAccesses");
+
                     b.Navigation("FileDrives");
                 });
 #pragma warning restore 612, 618

@@ -8,5 +8,6 @@ public class User
     public string Password { get; set; }
     public Role  Role { get; set; }
     public int RoleId { get; set; }
-    public List<FileDrive>? FileDrives { get; set; }
+    public List<FileDrive> FileDrives { get; set; }
+    public List<FileAccess> FileAccesses { get; set; }
 }

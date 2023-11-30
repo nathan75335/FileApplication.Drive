@@ -11,8 +11,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasKey(x => x.Id);
         builder.HasIndex(x => x.Email)
             .IsUnique();
-        
-
+     
         builder.ToTable("Users");
     }
 }

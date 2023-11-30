@@ -1,0 +1,178 @@
+﻿@page "/share/{fileId}"
+@using System.Net.WebSockets
+@using System.Text
+@using Newtonsoft.Json
+@inject IJSRuntime JsRuntime
+@inject WebSocketService WebSocketService
+@inject AuthenticationStateProvider authenticationStateProvider
+@inject NavigationManager NavManager
+<h3>Share</h3>
+<div style="" id="share-div" tabindex="-1">
+   @*  <div class="modal-dialog"> *@
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Share File</h5>
+                <button type="button" class="btn-close" @onclick="@(async() => await CloseWindowAsync("share-div"))" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <label class="form-control">Enter The Email Of Users You Want To Send File With:</label>
+            <div class="m-4">
+                <p id="emails" class="p-4">
+
+                </p>
+            </div>
+            <div class="modal-body">
+                <div class="input-group mb-4">
+                    <label class="form-control">Email:</label>
+                    <input class="form-control" id="emailName" />
+                    <button class="btn btn-primary" @onclick="@(async() => { Emails.Add(await JsRuntime.InvokeAsync<string>("onClickAddEmail"));})">+ Add</button>
+                </div>
+                <div class="input-group mb-3">
+                    <input id="fileName-share" type="text" class="form-control" aria-label="Recipient's username" aria-describedby="basic-addon2">
+                    <div class="input-group-append">
+                        <span class="input-group-text extension-file" id="basic-addon2-share"></span>
+                    </div>
+                </div>
+                <div class="input-group mb-3">
+                    <select class="form-control" @bind="@AccessLevel">
+                        <option value=""></option>
+                        @foreach (var item in Enum.GetValues(typeof(AccessLevel)))
+                        {
+                            <option value="@item">@item.ToString()</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" @onclick="@(async() => await CloseWindowAsync("share-div"))">Close</button>
+                <button type="button" class="btn btn-primary" @onclick="@(async() => await ShareFileAsync())">Share</button>
+            </div>
+        </div>
+    @* </div> *@
+</div>
+
+@code {
+    public AccessLevel AccessLevel { get; set; }
+    public List<string> Emails = new List<string>();
+    [Parameter]
+    public string fileId { get; set; }
+    private List<FileDto> _files;
+    public bool IsLoading { get; set; } = false;
+    private UserSession userSession = new UserSession();
+
+    protected override async Task OnInitializedAsync()
+    {
+        IsLoading = true;
+        await base.OnInitializedAsync();
+
+        if (WebSocketService.ClientWebSocket.State != WebSocketState.Open)
+        {
+            await WebSocketService.ConnectAsync("ws://localhost:5125/ws");
+        }
+
+        var authentication = (CustomAuthenticationStateProvider)authenticationStateProvider;
+        userSession = await authentication.GetUserSessionAsync();
+        var request = JsonConvert.SerializeObject(new JsonRequest()
+            {
+                ConnectionId = String.Empty,
+                RequestType = RequestType.Request,
+                MethodType = MethodType.Get,
+                UserId = userSession.UserId,
+                Token = userSession.Token
+            });
+        ConnectionManagerService.UserId = userSession.UserId;
+        await Files.SendMessageAsync(WebSocketService.ClientWebSocket, request, WebSocketMessageType.Binary);
+
+        var receiveTask = Task.Run(async () =>
+        {
+            var buffer = new byte[50000 * 1024];
+
+            while (true)
+            {
+                var result = await WebSocketService.ClientWebSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+
+                if (result.MessageType == WebSocketMessageType.Binary)
+                {
+                    var messageReceived = Encoding.UTF32.GetString(buffer, 0, result.Count);
+                    var jsonResponse = JsonConvert.DeserializeObject<JsonRequest>(messageReceived);
+
+                    if (jsonResponse is { RequestType: RequestType.Response })
+                    {
+                        FileRequest? fileRequest = null;
+                        JsonRequest? response = null;
+
+
+                        switch (jsonResponse.MethodType)
+                        {
+                            // case MethodType.Post:
+                            //     fileRequest = JsonConvert.DeserializeObject<FileRequest>(jsonResponse.Body);
+
+                            //     break;
+                            // case MethodType.Put:
+                            //     fileRequest = JsonConvert.DeserializeObject<FileRequest>(jsonResponse.Body);
+
+                            //     break;
+                            // case MethodType.Delete:
+                            //     fileRequest = JsonConvert.DeserializeObject<FileRequest>(jsonResponse.Body);
+
+                            //     //response = ;
+                            // break;
+                            case MethodType.Get:
+                                var files = JsonConvert.DeserializeObject<List<FileDto>>(jsonResponse.Body);
+                                IsLoading = false;
+                                _files = files;
+
+                                var file =  _files.Where(f => f.Id.Equals(Convert.ToInt32(fileId))).FirstOrDefault();
+                                string name = Path.GetFileNameWithoutExtension(file.Name);
+                                string extension = Path.GetExtension(file.Name);
+                                await JsRuntime.InvokeVoidAsync("showShareWindow", name, extension);
+                                StateHasChanged();
+                                break;
+
+                        }
+                    }
+                }
+
+                if (result.MessageType == WebSocketMessageType.Text)
+                {
+                    var messageReceived = Encoding.UTF32.GetString(buffer, 0, result.Count);
+                    ConnectionManagerService.ConnectionId = messageReceived;
+
+                }
+
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    break;
+                }
+            }
+        });
+    }
+
+    public async Task ShareFileAsync()
+    {
+        var authentication = (CustomAuthenticationStateProvider)authenticationStateProvider;
+        userSession = await authentication.GetUserSessionAsync();
+        var fileAccessRequest = new FileAccessRequest();
+        fileAccessRequest.FileId = Convert.ToInt32(fileId);
+        fileAccessRequest.Emails = Emails;
+        fileAccessRequest.AccessLevel = AccessLevel;
+
+        var request = JsonConvert.SerializeObject(new JsonRequest()
+        {
+                ConnectionId = String.Empty,
+                RequestType = RequestType.Request,
+                MethodType = MethodType.PostFileAccess,
+                UserId = userSession.UserId,
+                Token = userSession.Token,
+                Body = JsonConvert.SerializeObject(fileAccessRequest)
+        });
+
+        await Files.SendMessageAsync(WebSocketService.ClientWebSocket, request, WebSocketMessageType.Binary);
+        await JsRuntime.InvokeVoidAsync("alert", "share successfully!!");
+        NavManager.NavigateTo("/files");
+    }
+
+    public async Task CloseWindowAsync(string divId)
+    {
+        await JsRuntime.InvokeVoidAsync("handleOnClose", divId);
+    }
+}

@@ -8,8 +8,10 @@
 @using CoursWork.Drive.Shared.Requests;
 @using System.Text.Encodings.Web;
 @using Newtonsoft.Json;
+@inject WebSocketService WebSocketService
 @inject IJSRuntime JsRuntime
 @inject AuthenticationStateProvider authenticationStateProvider
+@inject NavigationManager NavManager
 @page "/files"
 @attribute [Authorize]
 <h3>Files</h3>
@@ -113,11 +115,17 @@
                                 <div class="d-flex d-inline-block">
                                     <button class="btn btn-secondary m-1" @onclick='async() => await ShowRenameWindowAsync(file.Name, file.Id)'>Rename</button>
                                     <button class="btn btn-danger m-1" @onclick="async() => await DeleteAsync(file.Id)">Delete</button>
-                                    <button class="btn btn-success" @onclick="async() => await DownloadAsync(file.Id)">
+                                    <button class="btn btn-success m-1" @onclick="async() => await DownloadAsync(file.Id)">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16">
                                             <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z" />
                                             <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z" />
                                         </svg>&nbsp;Download
+                                    </button>
+                                    <button class="btn btn-outline-success" @onclick='() => {NavManager.NavigateTo($"/share/{file.Id}");}'>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-folder-symlink" viewBox="0 0 16 16">
+                                            <path d="m11.798 8.271-3.182 1.97c-.27.166-.616-.036-.616-.372V9.1s-2.571-.3-4 2.4c.571-4.8 3.143-4.8 4-4.8v-.769c0-.336.346-.538.616-.371l3.182 1.969c.27.166.27.576 0 .742" />
+                                            <path d="m.5 3 .04.87a1.99 1.99 0 0 0-.342 1.311l.637 7A2 2 0 0 0 2.826 14h10.348a2 2 0 0 0 1.991-1.819l.637-7A2 2 0 0 0 13.81 3H9.828a2 2 0 0 1-1.414-.586l-.828-.828A2 2 0 0 0 6.172 1H2.5a2 2 0 0 0-2 2m.694 2.09A1 1 0 0 1 2.19 4h11.62a1 1 0 0 1 .996 1.09l-.636 7a1 1 0 0 1-.996.91H2.826a1 1 0 0 1-.995-.91l-.637-7zM6.172 2a1 1 0 0 1 .707.293L7.586 3H2.19c-.24 0-.47.042-.683.12L1.5 2.98a1 1 0 0 1 1-.98h3.672z" />
+                                        </svg> Share
                                     </button>
                                 </div>
                             </td>
@@ -140,7 +148,6 @@
     private List<FileDto> _files = new List<FileDto>();
     public bool IsLoading { get; set; } = false;
     private IBrowserFile file;
-    ClientWebSocket ws = new ClientWebSocket();
     FileRequest fileRequestRename = null;
     private UserSession userSession = new UserSession();
 
@@ -149,7 +156,11 @@
         IsLoading = true;
         base.OnInitialized();
 
-        await ws.ConnectAsync(new Uri("ws://localhost:5125/ws"), CancellationToken.None);
+        if(WebSocketService.ClientWebSocket.State != WebSocketState.Open)
+        {
+            await WebSocketService.ConnectAsync("ws://localhost:5125/ws");
+        }
+        
         var authentication = (CustomAuthenticationStateProvider)authenticationStateProvider;
         userSession = await authentication.GetUserSessionAsync();
         var request = JsonConvert.SerializeObject(new JsonRequest()
@@ -161,15 +172,15 @@
                 Token = userSession.Token
             });
         ConnectionManagerService.UserId = userSession.UserId;
-        await SendMessageAsync(ws, request, WebSocketMessageType.Binary);
+        await Files.SendMessageAsync(WebSocketService.ClientWebSocket, request, WebSocketMessageType.Binary);
 
         var receiveTask = Task.Run(async () =>
         {
-            var buffer = new byte[1024 * 50000];
+            var buffer = new byte[50000*1024];
 
             while (true)
             {
-                var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                var result = await WebSocketService.ClientWebSocket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
 
                 if (result.MessageType == WebSocketMessageType.Binary)
                 {
@@ -229,7 +240,7 @@
 
     }
 
-    public async Task SendMessageAsync(WebSocket webSocket, string message, WebSocketMessageType websocketMessageType)
+    public static async Task SendMessageAsync(WebSocket webSocket, string message, WebSocketMessageType websocketMessageType)
     {
         var buffer = Encoding.UTF32.GetBytes(message);
 
@@ -283,7 +294,7 @@
         var requestSerialized = JsonConvert.SerializeObject(request);
         try
         {
-            await SendMessageAsync(ws, requestSerialized, WebSocketMessageType.Binary);
+            await SendMessageAsync(WebSocketService.ClientWebSocket, requestSerialized, WebSocketMessageType.Binary);
         }
         catch(Exception ex)
         {
@@ -302,7 +313,7 @@
                 UserId = ConnectionManagerService.UserId
             });
 
-        await SendMessageAsync(ws, requestAll, WebSocketMessageType.Binary);
+        await SendMessageAsync(WebSocketService.ClientWebSocket, requestAll, WebSocketMessageType.Binary);
         IsLoading = true;
         _files = null;
         StateHasChanged();
@@ -354,7 +365,7 @@
 
         try
         {
-            await SendMessageAsync(ws, requestSerialized, WebSocketMessageType.Binary);
+            await SendMessageAsync(WebSocketService.ClientWebSocket, requestSerialized, WebSocketMessageType.Binary);
         }
         catch (Exception ex)
         {
@@ -373,7 +384,7 @@
 
     public async Task DownloadAsync(int id)
     {
-        await SendMessageAsync(ws,
+        await SendMessageAsync(WebSocketService.ClientWebSocket,
         JsonConvert.SerializeObject(
                 new JsonRequest()
                     {
@@ -414,7 +425,7 @@
                 MethodType = MethodType.Put
             };
 
-        await SendMessageAsync(ws, JsonConvert.SerializeObject(request), WebSocketMessageType.Binary);
+        await SendMessageAsync(WebSocketService.ClientWebSocket, JsonConvert.SerializeObject(request), WebSocketMessageType.Binary);
 
         await CloseWindowAsync("rename-div");
     }

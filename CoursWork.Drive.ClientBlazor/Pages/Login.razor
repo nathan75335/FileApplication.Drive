@@ -100,13 +100,17 @@
             var result = await response.Content.ReadFromJsonAsync<UserSession>();
             var customAuthenticationState = (CustomAuthenticationStateProvider)authenticationStateProvider;
             await customAuthenticationState.UpdateAuthenticationStateAsync(result);
-          
+
             NavManager.NavigateTo("/files", true);
         }
-        if(response is not null && response.StatusCode == HttpStatusCode.Unauthorized)
+        else if(response is not null && response.StatusCode == HttpStatusCode.Unauthorized)
         {
             await JsRuntime.InvokeVoidAsync("alert", "invalid username or password");
             return;
+        }
+        else
+        {
+            await JsRuntime.InvokeVoidAsync("alert", "Could not login. Try later");
         }
     }
 

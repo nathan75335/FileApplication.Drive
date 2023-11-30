@@ -5,39 +5,45 @@ namespace CoursWork.Drive.DataAccess.Repositories;
 
 public class FileDriveRepository : IFileDriveRepository
 {
-    private readonly DriveContext _driveContext;
-    private readonly DbSet<FileDrive> _files;
+    private IDbContextFactory<DriveContext> _dbContextFactory;
 
-    public FileDriveRepository(DriveContext driveContext)
+    public FileDriveRepository(IDbContextFactory<DriveContext> dbContextFactory)
     {
-        _driveContext = driveContext;
-        _files = _driveContext.Set<FileDrive>();
+        _dbContextFactory = dbContextFactory;
     }
 
     public async Task<FileDrive> AddAsync(FileDrive fileDrive)
     {
 
-        _files.Add(fileDrive);
-        await _driveContext.SaveChangesAsync();
+        using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        context.FileDrives.Add(fileDrive);
+        await context.SaveChangesAsync();
 
         return fileDrive;
     }
 
     public async Task DeleteAsync(FileDrive fileDrive)
     {
-        await _files.Where(file => file.Id.Equals(fileDrive.Id)).ExecuteDeleteAsync();
+        using var context = await _dbContextFactory.CreateDbContextAsync();
+        await context.FileDrives.Where(file => file.Id.Equals(fileDrive.Id)).ExecuteDeleteAsync();
     }
 
     public async Task<FileDrive?> GetByIdAsync(int id)
     {
-        return await _files
+        using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        return await context.FileDrives
             .AsNoTracking()
             .FirstOrDefaultAsync(file => file.Id.Equals(id));
     }
 
     public async Task<List<FileDrive>> GetFilesAsync(int userId)
     {
-        return await _files
+        using var context = await _dbContextFactory.CreateDbContextAsync();
+
+        return await context.FileDrives
+            .AsNoTracking()
             .Where(file => file.UserId == userId).Select(source => new FileDrive
             {
                 Id = source.Id,
@@ -51,7 +57,8 @@ public class FileDriveRepository : IFileDriveRepository
 
     public async Task<FileDrive> UpdateAsync(FileDrive fileDrive)
     {
-        await _files.Where(file => file.Id.Equals(fileDrive.Id)).ExecuteUpdateAsync(setters => setters.SetProperty(file => file.Name, fileDrive.Name));
+        using var context = await _dbContextFactory.CreateDbContextAsync();
+        await context.FileDrives.Where(file => file.Id.Equals(fileDrive.Id)).ExecuteUpdateAsync(setters => setters.SetProperty(file => file.Name, fileDrive.Name));
 
         return fileDrive;
     }
